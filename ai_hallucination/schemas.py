@@ -1,16 +1,15 @@
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# --- Verification Schemas ---
 class Claim(BaseModel):
-    text: string
-    status: str  # verified, questionable, false
+    text: str
+    status: str
     reason: str
 
 class Citation(BaseModel):
-    text: string
-    status: str  # valid, invalid, unknown
+    text: str
+    status: str
     reason: str
 
 class VerificationResult(BaseModel):
@@ -30,33 +29,3 @@ class VerificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-# --- Chat Schemas ---
-class MessageCreate(BaseModel):
-    content: str
-
-class MessageResponse(BaseModel):
-    id: int
-    role: str
-    content: str
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
-
-class ConversationResponse(BaseModel):
-    id: int
-    title: Optional[str]
-    messages: List[MessageResponse] = []
-    
-    class Config:
-        from_attributes = True
-
-# --- Image Schemas ---
-class ImageRequest(BaseModel):
-    prompt: str
-    size: Optional[str] = "1024x1024"
-
-class ImageResponse(BaseModel):
-    url: str
-    b64_json: Optional[str] = None
