@@ -8,7 +8,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Use Flash for better reliability on Render
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.0-flash')
 sem = asyncio.Semaphore(2)
 
 class AIService:
