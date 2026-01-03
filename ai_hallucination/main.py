@@ -1,56 +1,65 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlmodel import select
+from sqlmodel import select, SQLModel
 from database import get_session, engine
 from models import Verification, Message, Conversation
 from services import AIService
+from contextlib import asynccontextmanager
 import json
 import os
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 5000)) # Render provides the port automatically
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
 
-app = FastAPI()
+# 1. DATABASE SEEDING LOGIC
+async def init_db():
+    async with engine.begin() as conn:
+        # This creates tables if they don't exist
+        await conn.run_sync(SQLModel.metadata.create_all)
+
+# 2. LIFESPAN MANAGER (Replaces old startup events)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("Starting up: Creating database tables...")
+    await init_db()
+    yield
+    print("Shutting down...")
+
+app = FastAPI(lifespan=lifespan)
+
+# 3. HEALTH CHECK (Use this to test your connection)
+@app.get("/health")
+async def health_check(db: AsyncSession = Depends(get_session)):
+    try:
+        await db.execute(select(1))
+        return {"status": "online", "database": "connected"}
+    except Exception as e:
+        return {"status": "error", "database": str(e)}
 
 @app.post("/api/verifications/create")
 async def create_verification(data: dict, db: AsyncSession = Depends(get_session)):
-    # 1. AI Analysis
-    raw_result = await AIService.analyze_text(data['text'])
-    result_json = json.loads(raw_result)
+    if 'text' not in data:
+        raise HTTPException(status_code=400, detail="Missing 'text' field")
     
-    # 2. Save to DB
-    db_verif = Verification(input_text=data['text'], result=result_json)
-    db.add(db_verif)
-    await db.commit()
-    await db.refresh(db_verif)
-    return db_verif
-
-@app.post("/api/conversations/{id}/messages")
-async def chat_message(id: int, data: dict, db: AsyncSession = Depends(get_session)):
-    # Save user message
-    user_msg = Message(conversation_id=id, role="user", content=data['content'])
-    db.add(user_msg)
-    await db.commit()
-
-    async def event_generator():
-        full_response = ""
-        # Fetch history and stream Gemini response
-        async for chunk in AIService.stream_chat([], data['content']):
-            full_response += chunk
-            yield f"data: {json.dumps({'content': chunk})}\n\n"
+    # 4. AI Analysis with Error Handling
+    try:
+        raw_result = await AIService.analyze_text(data['text'])
+        # Clean markdown if Gemini returns ```json ... ```
+        clean_json = raw_result.strip().replace("```json", "").replace("```", "")
+        result_json = json.loads(clean_json)
         
-        # Save complete AI response to DB
-        assistant_msg = Message(conversation_id=id, role="assistant", content=full_response)
-        db.add(assistant_msg)
+        # 5. Save to DB
+        db_verif = Verification(input_text=data['text'], result=result_json)
+        db.add(db_verif)
         await db.commit()
-        yield "data: {\"done\": true}\n\n"
+        await db.refresh(db_verif)
+        return db_verif
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+# (Keep your chat_message endpoint here...)
 
-# Start-up seeding logic
-@app.on_event("startup")
-async def on_startup():
-    # Database migration logic here
-    pass
+# Render-specific entry point
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 5000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
