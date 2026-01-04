@@ -8,11 +8,14 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set!")
+    raise ValueError("DATABASE_URL is not set")
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True
+    echo=True,
+    connect_args={
+        "ssl": True
+    }
 )
 
 async_session_factory = async_sessionmaker(
