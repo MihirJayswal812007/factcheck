@@ -5,8 +5,8 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# ✅ VALID MODEL NAME
-model = genai.GenerativeModel("gemini-1.5-flash")
+# ✅ MOST COMPATIBLE MODEL
+model = genai.GenerativeModel("gemini-pro")
 
 sem = asyncio.Semaphore(2)
 
